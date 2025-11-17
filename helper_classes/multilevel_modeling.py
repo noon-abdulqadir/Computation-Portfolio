@@ -37,7 +37,38 @@ from setup_module import researchpy_fork as rp # type:ignore # isort:skip # fmt:
 # %%
 class MultiLevelModeling:
 
-    def __init__(self, hypothesis_num: str, df: pd.DataFrame, dv: str, ivs_list: list[str], cols_cov_list: list[str] = None, levels_list: list[str] = None, moderators_list: list[str] = None, ols_only: bool = None, iv_interactions: bool = None, df_bisect_col: str = None, df_bisect_cat: str = None, remove_biset_col: bool = None, switch_enabled: bool = None, decimals: int = None, print_summary: bool = None, plot_enabled: bool = None, model_compare_enabled: bool = None, save_enabled: bool = None, model_save_enabled: bool = None, sm_check: bool = None, fitted_models: dict = None):
+    def __init__(
+        self,
+        hypothesis_num: str,
+        df: pd.DataFrame,
+        dv: str,
+        ivs_list: list[str],
+        cols_cov_list: list[str] = None,
+        levels_list: list[str] = None,
+        moderators_list: list[str] = None,
+        ols_only: bool = None,
+        iv_interactions: bool = None,
+        df_bisect_col: str = None,
+        df_bisect_cat: str = None,
+        remove_biset_col: bool = None,
+        switch_enabled: bool = None,
+        decimals: int = None,
+        print_summary: bool = None,
+        plot_enabled: bool = None,
+        model_compare_enabled: bool = None,
+        save_enabled: bool = None,
+        model_save_enabled: bool = None,
+        sm_check: bool = None,
+        fitted_models: dict = None,
+        bayes_enabled: bool = None,
+        bayes_stepwise: bool = None,
+        bayes_draws: int | None = None,
+        bayes_chains: int | None = None,
+        bayes_cores: int | None = None,
+        bayes_target_accept: float | None = None,
+        bayes_family: str | None = None,
+        bayes_priors: dict | None = None,
+    ):
         self.hypothesis_num: str = hypothesis_num
         self.df_bisect_col = None if not df_bisect_col else df_bisect_col
         self.df_bisect_cat = None if not df_bisect_cat else df_bisect_cat
@@ -62,6 +93,16 @@ class MultiLevelModeling:
         self.model_save_enabled: bool = model_save_enabled if model_save_enabled is not None else False
         self.sm_check: bool = sm_check if sm_check is not None else True
         self.fitted_models = fitted_models if fitted_models is not None else defaultdict(lambda: defaultdict(dict))
+
+        # Bayesian defaults
+        self.bayes_enabled: bool = bayes_enabled if bayes_enabled is not None else False
+        self.bayes_stepwise: bool = bayes_stepwise if bayes_stepwise is not None else False
+        self.bayes_draws: int = bayes_draws if bayes_draws is not None else 2000
+        self.bayes_chains: int = bayes_chains if bayes_chains is not None else 4
+        self.bayes_cores: int | None = bayes_cores  # if None, we will compute a default later
+        self.bayes_target_accept: float = bayes_target_accept if bayes_target_accept is not None else 0.9
+        self.bayes_family: str = bayes_family
+        self.bayes_priors: dict = bayes_priors
 
     def _get_color_mapping(self, categories: list[str]) -> list[str]:
         gray = colorblind_hex_colors[2]
@@ -274,6 +315,23 @@ class MultiLevelModeling:
             print(f'Cannot print ttest for {self.hypothesis_num.capitalize()}: {dv_str} because not all variables are categorical.')
             print('\n\n')
 
+    def save_plots(self, plot_name: str, var_str: str):
+        try:
+            close_plots(plt)
+        except Exception as e:
+            pass
+        if self.save_enabled:
+            print(f'Saving plots for {self.hypothesis_num.capitalize()} {self.dv} - {var_str} as {plot_name}')
+            img_save_path = f'{hypotheses_plot_save_path}{self.hypothesis_num}_{self.dv}_{var_str}_{plot_name}'
+            if self.df_bisect_col is not None:
+                img_save_path += f'_{self.df_bisect_cat}'
+            for image_save_format in ['png']:
+                plt.savefig(
+                    f'{img_save_path}.{image_save_format}',
+                    format=image_save_format, dpi=3000, bbox_inches='tight',
+                )
+        show_and_close_plots(plt)
+
     def plot_pointplot(self):
         close_plots(plt)
         dv_str = rename_predictor_name(self.dv)
@@ -342,16 +400,7 @@ class MultiLevelModeling:
                 plt.grid(True)
                 plt.tight_layout()
 
-                if self.save_enabled:
-                    img_save_path = f'{hypotheses_plot_save_path}{self.hypothesis_num}_{self.dv}_{var_str}_pointplot'
-                    if self.df_bisect_col is not None:
-                        img_save_path += f'_{self.df_bisect_cat}'
-                    for image_save_format in ['png']:
-                        plt.savefig(
-                            f'{img_save_path}.{image_save_format}',
-                            format=image_save_format, dpi=3000, bbox_inches='tight',
-                        )
-                show_and_close_plots(plt)
+                self.save_plots(plot_name='pointplot', var_str=var_str)
                 print('\n\n')
         else:
             print(f'Cannot plot pointplot for {self.hypothesis_num.capitalize()} {dv_str} because not all variables are categorical.')
@@ -424,16 +473,7 @@ class MultiLevelModeling:
                 plt.grid(True)
                 plt.tight_layout()
 
-                if self.save_enabled:
-                    img_save_path = f'{hypotheses_plot_save_path}{self.hypothesis_num}_{self.dv}_{var_str}_interactionplot'
-                    if self.df_bisect_col is not None:
-                        img_save_path += f'_{self.df_bisect_cat}'
-                    for image_save_format in ['png']:
-                        plt.savefig(
-                            f'{img_save_path}.{image_save_format}',
-                            format=image_save_format, dpi=3000, bbox_inches='tight',
-                        )
-                show_and_close_plots(plt)
+                self.save_plots(plot_name='interactionplot', var_str=var_str)
                 print('\n\n')
 
         else:
@@ -490,16 +530,7 @@ class MultiLevelModeling:
                 plt.title(title, fontsize=14)
                 plt.grid(True)
                 fig.tight_layout()
-                if self.save_enabled:
-                    img_save_path = f'{hypotheses_plot_save_path}{self.hypothesis_num}_{self.dv}_{self.moderators_list[0]}_moderation_interactionplot'
-                    if self.df_bisect_col is not None:
-                        img_save_path += f'_{self.df_bisect_cat}'
-                    for image_save_format in ['png']:
-                        plt.savefig(
-                            f'{img_save_path}.{image_save_format}',
-                            format=image_save_format, dpi=3000, bbox_inches='tight',
-                        )
-                show_and_close_plots(plt)
+                self.save_plots(plot_name='moderation_interactionplot', var_str=moderators_list[0])
                 print('\n\n')
 
         else:
@@ -675,6 +706,48 @@ class MultiLevelModeling:
         show_and_close_plots(plt)
         print('\n')
 
+    def plot_bayesian_model(self, idata, var_names=None):
+        """Plot ArviZ trace for a fitted Bayesian model.
+
+        Parameters
+        ----------
+        idata : arviz.InferenceData
+            The fitted posterior returned by bambi.Model.fit() / PyMC sampling.
+        var_names : list[str] | None
+            Optional subset of parameter names to plot. If None, ArviZ chooses a default subset.
+        """
+        # Local imports so the whole module doesn't hard‑require these
+        try:
+            import arviz as az  # type: ignore
+        except Exception as e:
+            print(f"arviz is required for plotting Bayesian traces: {e}")
+            return
+
+        close_plots(plt)
+        print('='*20)
+        print(f'Plotting Bayesian trace for model {self.hypothesis_num}: {rename_predictor_name(self.dv)}')
+        print('='*20)
+
+        # Create the trace plot
+        az.plot_trace(idata, var_names=var_names, figsize=(14, 10))
+        plt.suptitle(
+            f'Bayesian Trace – {self.hypothesis_num.capitalize()} – DV: {rename_predictor_name(self.dv)}',
+            y=1.02, fontsize=14,
+        )
+        plt.tight_layout()
+
+        if self.save_enabled:
+            img_save_path = f'{hypotheses_plot_save_path}{self.hypothesis_num}_{self.dv}_bayes_traceplot'
+            if self.df_bisect_col is not None:
+                img_save_path += f'_{self.df_bisect_cat}'
+            for image_save_format in ['png']:
+                plt.savefig(
+                    f'{img_save_path}.{image_save_format}',
+                    format=image_save_format, dpi=3000, bbox_inches='tight',
+                )
+        show_and_close_plots(plt)
+        print('\n')
+
     def plot_sm_model(self, sm_model):
         close_plots(plt)
         figsize = (16, 6)
@@ -720,24 +793,24 @@ class MultiLevelModeling:
         ax.set_ylabel('Predictor(s)', fontsize=14)
         ax.set_title(f'OLS Model {self.hypothesis_num.capitalize()} for {rename_predictor_name(self.dv)} on {" x ".join([rename_predictor_name(col) for col in self.ivs_list])}', fontsize=16)
         plt.tight_layout()
+        self.save_plots(plot_name='sm_estimatesplot', var_str='ols')
+        print('\n\n')
 
-        if self.save_enabled:
-            image_save_path = f'{hypotheses_plot_save_path}{self.hypothesis_num}_{self.dv}_sm_estimatesplot'
-            if self.df_bisect_col is not None:
-                image_save_path += f'_{self.df_bisect_cat}'
-            for image_save_format in ['png']:
-                plt.savefig(
-                    f'{image_save_path}.{image_save_format}',
-                    format=image_save_format, dpi=3000, bbox_inches='tight',
-                )
-        show_and_close_plots(plt)
-        print('\n')
-
-    def fit_stepwise_models(self):
+    def get_model_lists(self):
         self.formula_list = self.make_formula_list()
         self.level_formula = self.make_level_formula()
         self.cov_formula = self.make_covariate_formula()
 
+        if self.print_summary:
+            print(f'Formula list for {self.hypothesis_num.capitalize()} {rename_predictor_name(self.dv)}:')
+            pprint.pprint(self.formula_list)
+            print(f'Level formula: {self.level_formula}')
+            print(f'Covariate formula: {self.cov_formula}')
+
+        return self.formula_list, self.level_formula, self.cov_formula
+
+    def fit_stepwise_models(self):
+        self.formula_list, self.level_formula, self.cov_formula = self.get_model_lists()
         self.model_results_list = []
 
         for i, formula in tqdm.tqdm(enumerate(self.formula_list)):
@@ -787,9 +860,116 @@ class MultiLevelModeling:
 
         return self.model_results_list
 
+    def fit_stepwise_bayesian_model(self):
+        self.formula_list, self.level_formula, self.cov_formula = self.get_model_lists()
+
+        if self.bayes_stepwise:
+            print(f'Bayesian stepwise fitting enabled for {self.hypothesis_num.capitalize()}. Fitting all models in sequence.')
+        elif not self.bayes_stepwise:
+            print(f'Bayesian stepwise fitting disabled for {self.hypothesis_num.capitalize()}. Fitting only the most complex model.')
+            self.formula_list = self.formula_list[-1:]
+
+        # Determine columns needed and drop incomplete rows
+        used_cols = [self.dv] + list(self.ivs_list) + list(self.moderators_list) + list(self.cols_cov_list)
+        if self.levels_list:
+            used_cols += list(self.levels_list)
+        used_cols = [c for c in used_cols if c in self.df.columns]
+        df_bayes = self.df.dropna(subset=used_cols).copy()
+        n_dropped = len(self.df) - len(df_bayes)
+        if n_dropped > 0 and self.print_summary:
+            print(f'Dropping {n_dropped} row(s) with NA(s) in: {sorted(set(used_cols))}')
+
+        # Family selection
+        fam = self.bayes_family
+        if fam is None:
+            try:
+                dv_series = df_bayes[self.dv].dropna()
+                unique_vals = set(pd.unique(dv_series))
+                if unique_vals.issubset({0, 1}) and dv_series.dtype.kind in {'i', 'b', 'u'}:
+                    fam = 'bernoulli'
+                else:
+                    fam = 'gaussian'
+            except Exception:
+                fam = 'gaussian'
+
+        # Cores logic
+        if self.bayes_cores is None:
+            cores = 1
+        else:
+            cores = int(self.bayes_cores)
+
+        bayes_results = []
+
+        # Iterate stepwise over every formula (mirrors frequentist pipeline)
+        for i, formula in enumerate(self.formula_list):
+            if self.cov_formula is None or ('1' in formula and i == 0):
+                rhs = formula
+            else:
+                rhs = f'{formula} + {self.cov_formula}'
+
+            # Add random-effects levels if present
+            if self.level_formula:
+                full_formula = f'{rhs} + {self.level_formula}'
+            else:
+                full_formula = rhs
+
+            if self.print_summary:
+                print('\n')
+                print('='*20)
+                print(f'BAYESIAN MODEL {i} for {self.hypothesis_num.capitalize()}:')
+                if self.df_bisect_col is not None:
+                    print(f'\tBisecting df on column: {self.df_bisect_col} to keep {self.df_bisect_cat}')
+                print(f'\tRunning Bayesian model (bambi): {full_formula}  [family={fam}]')
+                print('='*20)
+
+            # Build and fit bambi model for this step
+            bmb_model = bmb.Model(full_formula, data=df_bayes, family=fam, priors=self.bayes_priors)
+            idata = bmb_model.fit(
+                draws=self.bayes_draws,
+                chains=self.bayes_chains,
+                cores=cores,
+                target_accept=self.bayes_target_accept,
+                progressbar=self.print_summary,
+            )
+
+            result = {'model': bmb_model, 'idata': idata, 'formula': full_formula}
+            bayes_results.append(result)
+
+            if self.print_summary:
+                try:
+                    import arviz as az  # type: ignore
+                    summ = az.summary(idata, kind='stats', round_to=self.decimals)
+                    print(summ)
+                except Exception as e:
+                    print(f'Could not print ArviZ summary: {e}')
+
+            # Plot only for the final (most complex) step to save time
+            if self.plot_enabled and (i == len(self.formula_list) - 1):
+                try:
+                    var_names = None
+                    try:
+                        var_names = [t.name for t in getattr(bmb_model, 'common_terms', [])] or None
+                    except Exception:
+                        var_names = None
+                    self.plot_bayesian_model(idata, var_names=var_names)
+                except Exception as e:
+                    print(f'Could not plot Bayesian trace: {e}')
+
+        # Optionally save the last posterior to disk
+        if self.model_save_enabled and len(bayes_results) > 0:
+            idata_path = f'{hypotheses_model_save_path}{self.hypothesis_num}_{self.dv}_bayes_model'
+            if self.df_bisect_col is not None:
+                idata_path += f'_{self.df_bisect_cat}'
+            try:
+                bayes_results[-1]['idata'].to_netcdf(f'{idata_path}.nc')
+            except Exception as e:
+                print(f'Failed to save InferenceData to NetCDF: {e}')
+
+        return bayes_results
+
     def fit_stepwise_sm_models(self):
         self.sm_formula_list = self.make_sm_formula_list()
-        self.sm_cov_formula = self.make_covariate_formula()
+        _, _, self.cov_formula = self.get_model_lists()
 
         self.sm_model_results_list = []
 
@@ -845,6 +1025,9 @@ class MultiLevelModeling:
     def get_model_results(self):
         if not self.ols_only:
             self.model_results = self.fitted_models[self.dv][self.hypothesis_num]['pymer'] = self.fit_stepwise_models()
+            # Run Bayesian stepwise models in parallel to pymer and store them
+            if self.bayes_enabled:
+                self.fitted_models[self.dv][self.hypothesis_num]['bayes'] = self.fit_stepwise_bayesian_model()
             if self.sm_check:
                 try:
                     self.fitted_models[self.dv][self.hypothesis_num]['sm'] = self.fit_stepwise_sm_models()
